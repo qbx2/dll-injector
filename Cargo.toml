@@ -1,0 +1,10 @@
+[package]
+name = "dll-injector"
+version = "0.1.0"
+edition = "2021"
+authors = ["qbx2 <sunyeop97@gmail.com>"]
+
+[dependencies]
+goblin = "0.4"
+thiserror = "1"
+winapi = { version = "0.3", features = ["processthreadsapi", "winnt", "minwindef", "errhandlingapi", "handleapi", "memoryapi", "libloaderapi", "synchapi", "winbase"] }
