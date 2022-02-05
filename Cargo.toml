@@ -10,6 +10,5 @@ readme = "README.md"
 keywords = ["dll", "injection", "hooking", "detour"]
 
 [dependencies]
-goblin = "0.4"
 thiserror = "1"
 winapi = { version = "0.3", features = ["processthreadsapi", "winnt", "minwindef", "errhandlingapi", "handleapi", "memoryapi", "libloaderapi", "synchapi", "winbase"] }

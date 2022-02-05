@@ -1,6 +1,6 @@
 use crate::deferred::Deferred;
 use std::mem::transmute;
-use winapi::shared::minwindef::{DWORD, LPVOID};
+use winapi::shared::minwindef::{DWORD, LPVOID, LPCVOID};
 use winapi::um::errhandlingapi::GetLastError;
 use winapi::um::handleapi::CloseHandle;
 use winapi::um::libloaderapi::{GetModuleHandleA, GetProcAddress};
@@ -8,7 +8,7 @@ use winapi::um::memoryapi::{VirtualAllocEx, VirtualFreeEx, WriteProcessMemory};
 use winapi::um::processthreadsapi::{CreateRemoteThread, OpenProcess};
 use winapi::um::synchapi::WaitForSingleObject;
 use winapi::um::winbase::INFINITE;
-use winapi::um::winnt::{HANDLE, MEM_COMMIT, MEM_RELEASE, PAGE_EXECUTE_READWRITE};
+use winapi::um::winnt::{HANDLE, MEM_COMMIT, MEM_RELEASE, PAGE_READWRITE};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -32,9 +32,6 @@ pub enum Error {
 
     #[error(transparent)]
     Io(#[from] std::io::Error),
-
-    #[error(transparent)]
-    Goblin(#[from] goblin::error::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -61,8 +58,9 @@ unsafe fn virtual_alloc_ex(
     deferred: &mut Deferred,
     h_process: HANDLE,
     size: usize,
+    protection: DWORD,
 ) -> Result<LPVOID> {
-    let buf = VirtualAllocEx(h_process, 0 as _, size, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
+    let buf = VirtualAllocEx(h_process, 0 as _, size, MEM_COMMIT, protection);
 
     if buf.is_null() {
         return Err(Error::OpenProcess(GetLastError()));
@@ -75,17 +73,40 @@ unsafe fn virtual_alloc_ex(
     Ok(buf)
 }
 
-pub(crate) unsafe fn inject_dll_manual_map(
+unsafe fn create_remote_thread_and_wait(
     deferred: &mut Deferred,
     h_process: HANDLE,
-    filename: &str,
+    address: LPCVOID,
+    param: LPVOID,
 ) -> Result<()> {
-    unimplemented!()
+    let h_thread = CreateRemoteThread(
+        h_process,
+        0 as _,
+        0,
+        Some(transmute(address)),
+        param,
+        0,
+        0 as _,
+    );
+    if h_thread.is_null() {
+        return Err(Error::CreateRemoteThread(GetLastError()));
+    }
+
+    deferred.push(move || {
+        CloseHandle(h_thread);
+    });
+
+    let ret = WaitForSingleObject(h_thread, INFINITE);
+    if ret != 0 {
+        return Err(Error::WaitForSingleObject(ret, GetLastError()));
+    }
+
+    Ok(())
 }
 
 unsafe fn write_process_memory(
     h_process: HANDLE,
-    src: LPVOID,
+    src: LPCVOID,
     dst: LPVOID,
     size: usize,
 ) -> Result<()> {
@@ -108,9 +129,9 @@ pub(crate) unsafe fn inject_dll_load_library(
     filename.push('\0');
 
     assert!(filename.len() < 0x1000);
-    let buf = virtual_alloc_ex(deferred, h_process, 0x1000)?;
+    let buf = virtual_alloc_ex(deferred, h_process, 0x1000, PAGE_READWRITE)?;
 
-    write_process_memory(h_process, filename.as_mut_ptr() as _, buf, filename.len())?;
+    write_process_memory(h_process, filename.as_ptr() as _, buf, filename.len())?;
 
     let kernel32 = GetModuleHandleA("kernel32.dll\0".as_ptr() as _);
     if kernel32.is_null() {
@@ -122,27 +143,12 @@ pub(crate) unsafe fn inject_dll_load_library(
         return Err(Error::GetProcAddress(GetLastError()));
     }
 
-    let h_thread = CreateRemoteThread(
+    create_remote_thread_and_wait(
+        deferred,
         h_process,
-        0 as _,
-        0,
-        Some(transmute(load_library)),
-        buf as _,
-        0,
-        0 as _,
-    );
-    if h_thread.is_null() {
-        return Err(Error::CreateRemoteThread(GetLastError()));
-    }
-
-    deferred.push(move || {
-        CloseHandle(h_thread);
-    });
-
-    let ret = WaitForSingleObject(h_thread, INFINITE);
-    if ret != 0 {
-        return Err(Error::WaitForSingleObject(ret, GetLastError()));
-    }
+        load_library as _,
+        buf,
+    )?;
 
     Ok(())
 }
