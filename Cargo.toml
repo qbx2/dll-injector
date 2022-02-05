@@ -1,6 +1,6 @@
 [package]
 name = "dll-injector"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["qbx2 <sunyeop97@gmail.com>"]
 license = "MPL-2.0"
