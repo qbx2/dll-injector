@@ -1,6 +1,6 @@
 [package]
 name = "dll-injector"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["qbx2 <sunyeop97@gmail.com>"]
 license = "MPL-2.0"
@@ -10,5 +10,7 @@ readme = "README.md"
 keywords = ["dll", "injection", "hooking", "detour"]
 
 [dependencies]
+exe = "0.4"
+iced-x86 = { version = "1", features = ["code_asm"] }
 thiserror = "1"
 winapi = { version = "0.3", features = ["processthreadsapi", "winnt", "minwindef", "errhandlingapi", "handleapi", "memoryapi", "libloaderapi", "synchapi", "winbase"] }

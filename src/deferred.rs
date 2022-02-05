@@ -8,6 +8,10 @@ impl Deferred {
     pub(crate) fn push<F: FnOnce() + 'static>(&mut self, f: F) {
         self.0.push(Box::new(f));
     }
+
+    pub(crate) fn clear(&mut self) {
+        self.0.clear();
+    }
 }
 
 impl Drop for Deferred {
